@@ -8,8 +8,9 @@ package = [
 
 lua = [
 	"scripts/mods/V2QoLs/*",
+	"materials/mods/V2QoLs/*"
 ]
 
-materials = [
+material = [
 	"materials/mods/V2QoLs/*"
 ]

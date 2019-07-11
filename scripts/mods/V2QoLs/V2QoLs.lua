@@ -79,15 +79,15 @@ local widget_settings = {
 	lose_condition_time_dead = "GameModeSettings.adventure.lose_condition_time_dead",
 	outlines = function()
 		if mod:get("outlines") == "VT1" then
-			mod:set("ally", 2, false)
-			mod:set("knocked_down", 3, false)
-			mod:set("interactable", 2, false)
-			mod:set("player_attention", 3, false)
+			mod:set("ally", 2, true)
+			mod:set("knocked_down", 3, true)
+			mod:set("interactable", 2, true)
+			mod:set("player_attention", 3, true)
 		elseif mod:get("outlines") == "VT2" then
-			mod:set("ally", 7, false)
-			mod:set("knocked_down", 7, false)
-			mod:set("interactable", 4, false)
-			mod:set("player_attention", 6, false)
+			mod:set("ally", 7, true)
+			mod:set("knocked_down", 7, true)
+			mod:set("interactable", 4, true)
+			mod:set("player_attention", 6, true)
 		end
 		mod.reset_outlines = true
 	end,
@@ -1316,12 +1316,15 @@ mod:hook(StateLoading, "_trigger_sound_events", function(func, self, level_key)
 end)
 
 --- Disable loading screen tips.
-mod:hook(LoadingView, "setup_tip_text", function(func, ...)
+mod:hook(LoadingView, "setup_tip_text", function(func, self, act_progression_index, game_mode)
 	if mod:get("loading_screen_tips") then
+		if self.widgets.tip_title_widget then
+			self.widgets.tip_title_widget = nil
+		end
 		return
 	end
 
-	return func(...)
+	return func(self, act_progression_index, game_mode)
 end)
 
 --- Hide loading screen subtitles.
@@ -1374,6 +1377,16 @@ mod:hook(MatchmakingManager, "find_game", function (func, self, level_key, diffi
 end)
 
 -- Hit Markers
+local CROSSHAIR_STYLE_FUNC_LOOKUP = {
+	default = "draw_default_style_crosshair",
+	circle = "draw_circle_style_crosshair",
+	dot = "draw_dot_style_crosshair"
+}
+local CROSSHAIR_ENABLED_STYLES_LOOKUP = {
+	default = true,
+	circle = true,
+	dot = true
+}
 mod:hook_safe(PlayerHud, "init", function (self, extension_init_context, unit, extension_init_data)
 	self.hit_marker_data = {}
 end)
@@ -1421,7 +1434,7 @@ crosshair_ui_definitions.scenegraph_definition.crosshair_hit_armored = {
 	}
 }
 mod:hook_safe(CrosshairUI,"create_ui_elements", function (self)
-	self._hit_armored_marker = UIWidget.init(definitions.widget_definitions.crosshair_hit_armored_no_damage)
+	self._hit_armored_marker = UIWidget.init(crosshair_ui_definitions.widget_definitions.crosshair_hit_armored_no_damage)
 end)
 mod:hook_origin(CrosshairUI, "update_hit_markers", function (self, dt)
 	Profiler.start("update_hit_markers")

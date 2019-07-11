@@ -10,9 +10,12 @@ return {
                 "ingame_ui",
                 "materials/mods/V2QoLs/rwaon_enemy_defense_indication_icon",
             },
-        },
-		textures = {
-			"materials/mods/V2QoLs/rwaon_enemy_defense_indication_icon",
+		},
+		atlases = {
+			{
+				"materials/mods/V2QoLs/rwaon_enemy_defense_indication_icon_atlas",
+				"rwaon_enemy_defense_indication_icon",
+			},
 		},
 	},
 	options = {
