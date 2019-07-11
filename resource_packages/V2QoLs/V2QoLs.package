@@ -1,0 +1,15 @@
+mod = [
+	"V2QoLs"
+]
+
+package = [
+	"resource_packages/V2QoLs/V2QoLs"
+]
+
+lua = [
+	"scripts/mods/V2QoLs/*",
+]
+
+materials = [
+	"materials/mods/V2QoLs/*"
+]
