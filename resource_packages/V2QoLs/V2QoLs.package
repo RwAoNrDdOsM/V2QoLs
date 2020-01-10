@@ -12,5 +12,6 @@ lua = [
 ]
 
 material = [
+	"scripts/mods/V2QoLs/*",
 	"materials/mods/V2QoLs/*"
 ]

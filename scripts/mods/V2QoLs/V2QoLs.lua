@@ -19,54 +19,279 @@ mod.update = function(dt)
 			mod.game_request_amount = 0
 		end
 	end
+end
 
-	--Auto Blocking delay
-	if mod.block_delay then
-		mod.block_delay = mod.block_delay - dt
-		if mod.block_delay <= 0 then
-			local status_extension = ScriptUnit.extension(mod.block_delay_unit, "status_system")
-			if status_extension:is_blocking() then
-				if Managers.state.network:game() then
-					local game_object_id = Managers.state.unit_storage:go_id(mod.block_delay_unit)
+--[[if Managers.world:has_world("level_world") then
+	local world = Managers.world:world("level_world")
 
-					if Managers.state.game_mode.is_server then
-						Managers.state.network.network_transmit:send_rpc_clients("rpc_set_blocking", game_object_id, false)
-					else
-						Managers.state.network.network_transmit:send_rpc_server("rpc_set_blocking", game_object_id, false)
-					end
-				end 
+	local units = World.units(world)
 
-				status_extension:set_blocking(false)
+	for _, unit in pairs(units) do
+		local num_lights = Unit.num_lights(unit)
+		
+		if num_lights then
+			for i = 1, num_lights, 1 do
+				Light.set_enabled(Unit.light(unit, i - 1), true)
+				Light.set_intensity(Unit.light(unit, i - 1), 100)
+				Light.set_color(Unit.light(unit, i - 1), Vector3(1, 0, 0))
 			end
-			mod.block_delay_unit = nil
-			mod.block_delay = nil
 		end
 	end
-end
+end--]]
+mod.pickups = {}
+
+mod:hook(PickupSystem, "_spawn_pickup", function (func, self, pickup_settings, pickup_name, position, rotation, with_physics, spawn_type)
+	if mod:get("pickups") then
+		if pickup_name == "damage_boost_potion" then
+			local next_index = self._next_index
+
+			if self._taken[next_index] then
+				return
+			end
+
+			local can_spawn_func = pickup_settings.can_spawn_func
+			local pickup_params = {
+				level_spawn = true,
+				statistics_db = self.statistics_db
+			}
+
+			if can_spawn_func and not can_spawn_func(pickup_params, spawn_type == "debug") then
+				return
+			end
+
+			local extension_init_data = {
+				pickup_system = {
+					pickup_name = pickup_name,
+					has_physics = with_physics,
+					spawn_type = spawn_type,
+					spawn_index = next_index
+				},
+				projectile_locomotion_system = {
+					network_position = AiAnimUtils.position_network_scale(position, true),
+					network_rotation = AiAnimUtils.rotation_network_scale(rotation, true),
+					network_velocity = AiAnimUtils.velocity_network_scale(Vector3.zero(), true),
+					network_angular_velocity = AiAnimUtils.velocity_network_scale(Vector3.zero(), true)
+				}
+			}
+			self._next_index = next_index + 1
+			local unit_template_name = pickup_settings.unit_template_name or "pickup_unit"
+			local additional_data_func = pickup_settings.additional_data_func
+
+			if additional_data_func then
+				local extra_extension_init_data = nil
+				extra_extension_init_data = self[additional_data_func](self, pickup_settings, position, rotation)
+
+				table.merge(extension_init_data, extra_extension_init_data)
+			end
+
+			local unit_name = pickup_settings.unit_name
+			local pickup_unit = Managers.state.unit_spawner:spawn_network_unit(unit_name, unit_template_name, extension_init_data, position, rotation)
+			
+			local pickup_unit_2 = Managers.state.unit_spawner:spawn_network_unit("units/weapons/player/pup_torch/pup_torch", "pickup_torch_unit_init", extension_init_data, position, rotation)
+			mod.pickups[pickup_unit] = pickup_unit_2
+			
+			local world = Managers.world:world("level_world")
+			World.link_unit(world, pickup_unit_2, pickup_unit)
+			Unit.set_unit_visibility(pickup_unit_2, false)
+			local num_lights = Unit.num_lights(pickup_unit_2)
+			--mod:echo(pickup_unit_2)
+			if num_lights then
+				for i = 1, num_lights, 1 do
+					local unit_light = Unit.light(pickup_unit_2, i - 1)
+					Light.set_enabled(unit_light, true)
+					Light.set_intensity(unit_light, 0.10)
+					Light.set_color(unit_light, Vector3(1, 0, 0))
+				end
+			end
+
+			if self.is_server then
+				self._spawned_pickups[#self._spawned_pickups + 1] = pickup_unit
+				local amount_spawned = self._amount_spawned
+				local amount = amount_spawned[pickup_name]
+
+				if amount then
+					amount_spawned[pickup_name] = amount + 1
+				else
+					amount_spawned[pickup_name] = 1
+				end
+			end
+
+			return pickup_unit
+		elseif pickup_name == "speed_boost_potion" then
+			local next_index = self._next_index
+
+			if self._taken[next_index] then
+				return
+			end
+
+			local can_spawn_func = pickup_settings.can_spawn_func
+			local pickup_params = {
+				level_spawn = true,
+				statistics_db = self.statistics_db
+			}
+
+			if can_spawn_func and not can_spawn_func(pickup_params, spawn_type == "debug") then
+				return
+			end
+
+			local extension_init_data = {
+				pickup_system = {
+					pickup_name = pickup_name,
+					has_physics = with_physics,
+					spawn_type = spawn_type,
+					spawn_index = next_index
+				},
+				projectile_locomotion_system = {
+					network_position = AiAnimUtils.position_network_scale(position, true),
+					network_rotation = AiAnimUtils.rotation_network_scale(rotation, true),
+					network_velocity = AiAnimUtils.velocity_network_scale(Vector3.zero(), true),
+					network_angular_velocity = AiAnimUtils.velocity_network_scale(Vector3.zero(), true)
+				}
+			}
+			self._next_index = next_index + 1
+			local unit_template_name = pickup_settings.unit_template_name or "pickup_unit"
+			local additional_data_func = pickup_settings.additional_data_func
+
+			if additional_data_func then
+				local extra_extension_init_data = nil
+				extra_extension_init_data = self[additional_data_func](self, pickup_settings, position, rotation)
+
+				table.merge(extension_init_data, extra_extension_init_data)
+			end
+
+			local unit_name = pickup_settings.unit_name
+			local pickup_unit = Managers.state.unit_spawner:spawn_network_unit(unit_name, unit_template_name, extension_init_data, position, rotation)
+			
+			local pickup_unit_2 = Managers.state.unit_spawner:spawn_network_unit("units/weapons/player/pup_torch/pup_torch", "pickup_torch_unit_init", extension_init_data, position, rotation)
+			mod.pickups[pickup_unit] = pickup_unit_2
+			
+			local world = Managers.world:world("level_world")
+			--World.link_unit(world, pickup_unit_2, pickup_unit)
+			Unit.set_unit_visibility(pickup_unit_2, false)
+			local num_lights = Unit.num_lights(pickup_unit_2)
+			--mod:echo(pickup_unit_2)
+			if num_lights then
+				for i = 1, num_lights, 1 do
+					local unit_light = Unit.light(pickup_unit_2, i - 1)
+					Light.set_enabled(unit_light, true)
+					Light.set_intensity(unit_light, 0.15)
+					Light.set_color(unit_light, Vector3(0, 0, 1))
+				end
+			end
+
+			if self.is_server then
+				self._spawned_pickups[#self._spawned_pickups + 1] = pickup_unit
+				local amount_spawned = self._amount_spawned
+				local amount = amount_spawned[pickup_name]
+
+				if amount then
+					amount_spawned[pickup_name] = amount + 1
+				else
+					amount_spawned[pickup_name] = 1
+				end
+			end
+
+			return pickup_unit
+		else
+			return func(self, pickup_settings, pickup_name, position, rotation, with_physics, spawn_type)
+		end
+	else
+		return func(self, pickup_settings, pickup_name, position, rotation, with_physics, spawn_type)
+	end
+end)
+
+mod:hook(InteractionDefinitions.pickup_object.server, "stop", function (func, world, interactor_unit, interactable_unit, data, config, t, result)
+	if mod.pickups[interactor_unit] then
+		Managers.state.unit_spawner:mark_for_deletion(mod.pickups[interactor_unit])
+	end
+	if mod.pickups[interactable_unit] then
+		Managers.state.unit_spawner:mark_for_deletion(mod.pickups[interactable_unit])
+	end
+	func(world, interactor_unit, interactable_unit, data, config, t, result)
+end)
+
+
+mod.reset_overcharge_bar = false
 
 local widget_settings = {
 	ally = {
 		"OutlineSettings.colors.ally.outline_multiplier",
 		function()
-			mod.reload_hud = true
+			if Managers.world:has_world("level_world") then
+				local world = Managers.world:world("level_world")
+			
+				local units = World.units(world)
+			
+				for _, unit in pairs(units) do
+					local outline_extension = ScriptUnit.extension(unit, "outline_system")
+
+					if outline_extension then
+						if outline_extension.update_override_outline_color then
+							outline_extension.update_override_outline_color()
+						end
+					end
+				end
+			end
 		end,
 	},
 	knocked_down = {
 		"OutlineSettings.colors.knocked_down.outline_multiplier",
 		function()
-			mod.reload_hud = true
+			if Managers.world:has_world("level_world") then
+				local world = Managers.world:world("level_world")
+			
+				local units = World.units(world)
+			
+				for _, unit in pairs(units) do
+					local outline_extension = ScriptUnit.extension(unit, "outline_system")
+
+					if outline_extension then
+						if outline_extension.update_override_outline_color then
+							outline_extension.update_override_outline_color()
+						end
+					end
+				end
+			end
 		end,
 	},
 	interactable = {
 		"OutlineSettings.colors.interactable.outline_multiplier",
 		function()
-			mod.reload_hud = true
+			if Managers.world:has_world("level_world") then
+				local world = Managers.world:world("level_world")
+			
+				local units = World.units(world)
+			
+				for _, unit in pairs(units) do
+					local outline_extension = ScriptUnit.extension(unit, "outline_system")
+
+					if outline_extension then
+						if outline_extension.update_override_outline_color then
+							outline_extension.update_override_outline_color()
+						end
+					end
+				end
+			end
 		end,
 	},
 	player_attention = {
 		"OutlineSettings.colors.player_attention.outline_multiplier",
 		function()
-			mod.reload_hud = true
+			if Managers.world:has_world("level_world") then
+				local world = Managers.world:world("level_world")
+			
+				local units = World.units(world)
+			
+				for _, unit in pairs(units) do
+					local outline_extension = ScriptUnit.extension(unit, "outline_system")
+
+					if outline_extension then
+						if outline_extension.update_override_outline_color then
+							outline_extension.update_override_outline_color()
+						end
+					end
+				end
+			end
 		end,
 	},
 	auto_blocking = {
@@ -89,231 +314,12 @@ local widget_settings = {
 			mod:set("interactable", 4, true)
 			mod:set("player_attention", 6, true)
 		end
-		mod.reset_outlines = true
 	end,
 	overcharge_bar = function()
-		if mod:get("overcharge_bar") then
-			local overcharge_bar_ui_definitions = require("scripts/ui/hud_ui/overcharge_bar_ui_definitions")
-			local passes = {}
-			if mod:get("overcharge_bar") == "high" then
-				overcharge_bar_ui_definitions.widget_definitions.charge_bar.style.black_divider_left_high = {
-					angle = 0,
-					scenegraph_id = "charge_bar_black_divider_start",
-					color = {
-						255,
-						255,
-						255,
-						255
-					},
-					pivot = {
-						4,
-						4
-					},
-					offset = {
-						0,
-						0,
-						0
-					}		
-				}
-				overcharge_bar_ui_definitions.widget_definitions.charge_bar.style.black_divider_right_high = {
-					angle = 0,
-					scenegraph_id = "charge_bar_black_divider_start",
-					color = {
-						255,
-						255,
-						255,
-						255
-					},
-					pivot = {
-						4,
-						4
-					},
-					offset = {
-						0,
-						0,
-						0
-					}
-				}
-				passes = {
-					{
-						pass_type = "rotated_texture",
-						style_id = "black_divider_left_high",
-						texture_id = "black_divider"
-					},
-					{
-						pass_type = "rotated_texture",
-						style_id = "black_divider_right_high",
-						texture_id = "black_divider"
-					},
-				}
-			elseif mod:get("overcharge_bar") == "med" then
-				passes = {
-					{
-						pass_type = "rotated_texture",
-						style_id = "black_divider_left_med",
-						texture_id = "black_divider"
-					},
-					{
-						pass_type = "rotated_texture",
-						style_id = "black_divider_right_med",
-						texture_id = "black_divider"
-					},
-				}
-				overcharge_bar_ui_definitions.widget_definitions.charge_bar.style.black_divider_left_med = {
-					angle = 0,
-					scenegraph_id = "charge_bar_black_divider_start",
-					color = {
-						255,
-						255,
-						255,
-						255
-					},
-					pivot = {
-						4,
-						4
-					},
-					offset = {
-						0,
-						0,
-						0
-					}		
-				}
-				overcharge_bar_ui_definitions.widget_definitions.charge_bar.style.black_divider_right_med = {
-					angle = 0,
-					scenegraph_id = "charge_bar_black_divider_start",
-					color = {
-						255,
-						255,
-						255,
-						255
-					},
-					pivot = {
-						4,
-						4
-					},
-					offset = {
-						0,
-						0,
-						0
-					}
-				}
-			elseif mod:get("overcharge_bar") == "both" then
-				passes = {
-					{
-						pass_type = "rotated_texture",
-						style_id = "black_divider_left_high",
-						texture_id = "black_divider"
-					},
-					{
-						pass_type = "rotated_texture",
-						style_id = "black_divider_right_high",
-						texture_id = "black_divider"
-					},
-					{
-						pass_type = "rotated_texture",
-						style_id = "black_divider_left_med",
-						texture_id = "black_divider"
-					},
-					{
-						pass_type = "rotated_texture",
-						style_id = "black_divider_right_med",
-						texture_id = "black_divider"
-					},
-				}
-				overcharge_bar_ui_definitions.widget_definitions.charge_bar.style.black_divider_left_high = {
-					angle = 0,
-					scenegraph_id = "charge_bar_black_divider_start",
-					color = {
-						255,
-						255,
-						255,
-						255
-					},
-					pivot = {
-						4,
-						4
-					},
-					offset = {
-						0,
-						0,
-						0
-					}		
-				}
-				overcharge_bar_ui_definitions.widget_definitions.charge_bar.style.black_divider_right_high = {
-					angle = 0,
-					scenegraph_id = "charge_bar_black_divider_start",
-					color = {
-						255,
-						255,
-						255,
-						255
-					},
-					pivot = {
-						4,
-						4
-					},
-					offset = {
-						0,
-						0,
-						0
-					}
-				}
-				overcharge_bar_ui_definitions.widget_definitions.charge_bar.style.black_divider_left_med = {
-					angle = 0,
-					scenegraph_id = "charge_bar_black_divider_start",
-					color = {
-						255,
-						255,
-						255,
-						255
-					},
-					pivot = {
-						4,
-						4
-					},
-					offset = {
-						0,
-						0,
-						0
-					}		
-				}
-				overcharge_bar_ui_definitions.widget_definitions.charge_bar.style.black_divider_right_med = {
-					angle = 0,
-					scenegraph_id = "charge_bar_black_divider_start",
-					color = {
-						255,
-						255,
-						255,
-						255
-					},
-					pivot = {
-						4,
-						4
-					},
-					offset = {
-						0,
-						0,
-						0
-					}
-				}
-			end
-		
-			if #passes > 0 then
-				table.append(overcharge_bar_ui_definitions.widget_definitions.charge_bar.element.passes, passes)
-			end
-			mod.reload_hud = true
-		end		
-	end,
+		mod.reset_overcharge_bar = true
+	end
 }
 
-mod:hook(OutlineSystem, "always", function (func, self, ...)
-	if mod.reset_outlines then
-		mod.reset_outlines = false
-		return false
-	end
-
-	return func(self, ...)
-end)
 local function type_widget_setting(widget_setting, setting_id)
 	if type(widget_setting) == "table" then
 		if #widget_setting > 0 then
@@ -352,216 +358,63 @@ mod:hook_safe(StateInGameRunning, "update", function (self, dt, t)
 		mod.reload_hud = false
 	end]]
 end)
--- Overcharge on melee equipped + critical overcharge bar
-if mod:get("overcharge_bar") then
-	local overcharge_bar_ui_definitions = require("scripts/ui/hud_ui/overcharge_bar_ui_definitions")
-	local passes = {}
-	if mod:get("overcharge_bar") == "high" then
-		overcharge_bar_ui_definitions.widget_definitions.charge_bar.style.black_divider_left_high = {
-			angle = 0,
-			scenegraph_id = "charge_bar_black_divider_start",
-			color = {
-				255,
-				255,
-				255,
-				255
-			},
-			pivot = {
-				4,
-				4
-			},
-			offset = {
-				0,
-				0,
-				0
-			}		
-		}
-		overcharge_bar_ui_definitions.widget_definitions.charge_bar.style.black_divider_right_high = {
-			angle = 0,
-			scenegraph_id = "charge_bar_black_divider_start",
-			color = {
-				255,
-				255,
-				255,
-				255
-			},
-			pivot = {
-				4,
-				4
-			},
-			offset = {
-				0,
-				0,
-				0
-			}
-		}
-		passes = {
-			{
-				pass_type = "rotated_texture",
-				style_id = "black_divider_left_high",
-				texture_id = "black_divider"
-			},
-			{
-				pass_type = "rotated_texture",
-				style_id = "black_divider_right_high",
-				texture_id = "black_divider"
-			},
-		}
-	elseif mod:get("overcharge_bar") == "med" then
-		passes = {
-			{
-				pass_type = "rotated_texture",
-				style_id = "black_divider_left_med",
-				texture_id = "black_divider"
-			},
-			{
-				pass_type = "rotated_texture",
-				style_id = "black_divider_right_med",
-				texture_id = "black_divider"
-			},
-		}
-		overcharge_bar_ui_definitions.widget_definitions.charge_bar.style.black_divider_left_med = {
-			angle = 0,
-			scenegraph_id = "charge_bar_black_divider_start",
-			color = {
-				255,
-				255,
-				255,
-				255
-			},
-			pivot = {
-				4,
-				4
-			},
-			offset = {
-				0,
-				0,
-				0
-			}		
-		}
-		overcharge_bar_ui_definitions.widget_definitions.charge_bar.style.black_divider_right_med = {
-			angle = 0,
-			scenegraph_id = "charge_bar_black_divider_start",
-			color = {
-				255,
-				255,
-				255,
-				255
-			},
-			pivot = {
-				4,
-				4
-			},
-			offset = {
-				0,
-				0,
-				0
-			}
-		}
-	elseif mod:get("overcharge_bar") == "both" then
-		passes = {
-			{
-				pass_type = "rotated_texture",
-				style_id = "black_divider_left_high",
-				texture_id = "black_divider"
-			},
-			{
-				pass_type = "rotated_texture",
-				style_id = "black_divider_right_high",
-				texture_id = "black_divider"
-			},
-			{
-				pass_type = "rotated_texture",
-				style_id = "black_divider_left_med",
-				texture_id = "black_divider"
-			},
-			{
-				pass_type = "rotated_texture",
-				style_id = "black_divider_right_med",
-				texture_id = "black_divider"
-			},
-		}
-		overcharge_bar_ui_definitions.widget_definitions.charge_bar.style.black_divider_left_high = {
-			angle = 0,
-			scenegraph_id = "charge_bar_black_divider_start",
-			color = {
-				255,
-				255,
-				255,
-				255
-			},
-			pivot = {
-				4,
-				4
-			},
-			offset = {
-				0,
-				0,
-				0
-			}		
-		}
-		overcharge_bar_ui_definitions.widget_definitions.charge_bar.style.black_divider_right_high = {
-			angle = 0,
-			scenegraph_id = "charge_bar_black_divider_start",
-			color = {
-				255,
-				255,
-				255,
-				255
-			},
-			pivot = {
-				4,
-				4
-			},
-			offset = {
-				0,
-				0,
-				0
-			}
-		}
-		overcharge_bar_ui_definitions.widget_definitions.charge_bar.style.black_divider_left_med = {
-			angle = 0,
-			scenegraph_id = "charge_bar_black_divider_start",
-			color = {
-				255,
-				255,
-				255,
-				255
-			},
-			pivot = {
-				4,
-				4
-			},
-			offset = {
-				0,
-				0,
-				0
-			}		
-		}
-		overcharge_bar_ui_definitions.widget_definitions.charge_bar.style.black_divider_right_med = {
-			angle = 0,
-			scenegraph_id = "charge_bar_black_divider_start",
-			color = {
-				255,
-				255,
-				255,
-				255
-			},
-			pivot = {
-				4,
-				4
-			},
-			offset = {
-				0,
-				0,
-				0
-			}
-		}
-	end
 
-	if #passes > 0 then
-		table.append(overcharge_bar_ui_definitions.widget_definitions.charge_bar.element.passes, passes)
-	end
+-- Overcharge on melee equipped + critical overcharge bar
+local overcharge_bar_ui_definitions = require("scripts/ui/hud_ui/overcharge_bar_ui_definitions")
+local passes = {}
+overcharge_bar_ui_definitions.widget_definitions.charge_bar.style.black_divider_left_high = {
+	angle = 0,
+	scenegraph_id = "charge_bar_black_divider_start",
+	color = {
+		255,
+		255,
+		255,
+		255
+	},
+	pivot = {
+		4,
+		4
+	},
+	offset = {
+		0,
+		0,
+		0
+	}		
+}
+overcharge_bar_ui_definitions.widget_definitions.charge_bar.style.black_divider_right_high = {
+	angle = 0,
+	scenegraph_id = "charge_bar_black_divider_start",
+	color = {
+		255,
+		255,
+		255,
+		255
+	},
+	pivot = {
+		4,
+		4
+	},
+	offset = {
+		0,
+		0,
+		0
+	}
+}
+passes = {
+	{
+		pass_type = "rotated_texture",
+		style_id = "black_divider_left_high",
+		texture_id = "black_divider"
+	},
+	{
+		pass_type = "rotated_texture",
+		style_id = "black_divider_right_high",
+		texture_id = "black_divider"
+	},
+}
+
+if #passes > 0 then
+	table.append(overcharge_bar_ui_definitions.widget_definitions.charge_bar.element.passes, passes)
 end
 local function get_overcharge_amount(left_hand_wielded_unit, right_hand_wielded_unit)
 	local overcharge_extension = nil
@@ -621,6 +474,10 @@ mod:hook_origin(OverchargeBarUI, "_update_overcharge", function (self, player, d
 				self:setup_charge_bar(min_threshold_fraction or 1, max_threshold_fraction, mid_threshold_fraction)
 			end
 
+			if mod.reset_overcharge_bar then
+				self:setup_charge_bar(min_threshold_fraction or 1, max_threshold_fraction, mid_threshold_fraction)
+				mod.reset_overcharge_bar = false
+			end
 			self:set_charge_bar_fraction(overcharge_fraction, min_threshold_fraction, anim_blend_overcharge)
 
 			return true
@@ -644,7 +501,7 @@ mod:hook_origin(OverchargeBarUI, "setup_charge_bar", function (self, threshold_f
 	widget_style.black_divider_right.angle = -radians
 	widget_style.black_divider_left.angle = radians
 
-	if mod:get("overcharge_bar") == "high" or mod:get("overcharge_bar") == "both" then
+	if mod:get("overcharge_bar") then
 		local marker_fraction_high = threshold_critical_fraction * 0.82
 		local x = r * math.sin(marker_fraction_high)
 		local y = r * -math.cos(marker_fraction_high)
@@ -656,19 +513,13 @@ mod:hook_origin(OverchargeBarUI, "setup_charge_bar", function (self, threshold_f
 		local radians = math.degrees_to_radians(current_angle)
 		widget_style.black_divider_right_high.angle = -radians
 		widget_style.black_divider_left_high.angle = radians
-	end
-	if mod:get("overcharge_bar") == "med" or mod:get("overcharge_bar") == "both" then
-		local marker_fraction_med = threshold_med_fraction * 0.82
-		local x = r * math.sin(marker_fraction_med)
-		local y = r * -math.cos(marker_fraction_med)
-		widget_style.black_divider_left_med.offset[1] = -x
-		widget_style.black_divider_left_med.offset[2] = y
-		widget_style.black_divider_right_med.offset[1] = x
-		widget_style.black_divider_right_med.offset[2] = y
-		local current_angle = threshold_med_fraction * one_side_max_angle
-		local radians = math.degrees_to_radians(current_angle)
-		widget_style.black_divider_right_med.angle = -radians
-		widget_style.black_divider_left_med.angle = radians
+	else
+		widget_style.black_divider_left_high.offset[1] = 0
+		widget_style.black_divider_left_high.offset[2] = 0
+		widget_style.black_divider_right_high.offset[1] = 0
+		widget_style.black_divider_right_high.offset[2] = 0
+		widget_style.black_divider_right_high.angle = 0
+		widget_style.black_divider_left_high.angle = 0
 	end
 end)
 
@@ -701,7 +552,7 @@ end)
 mod:hook_safe(PlayerCharacterStateInteracting, "on_exit", function (self, unit, input, dt, context, t, next_state)
     local status_extension = self.status_extension
 
-	if self.deactivate_block_on_exit and mod:get("auto_blocking") and not mod:get("auto_blocking_delay") then
+	if self.deactivate_block_on_exit and mod:get("auto_blocking") then
 		if Managers.state.network:game() then
 			local game_object_id = Managers.state.unit_storage:go_id(unit)
 
@@ -713,9 +564,6 @@ mod:hook_safe(PlayerCharacterStateInteracting, "on_exit", function (self, unit, 
 		end 
 
 		status_extension:set_blocking(false)
-	elseif self.deactivate_block_on_exit and mod:get("auto_blocking") and mod:get("auto_blocking_delay") then
-		mod.block_delay = mod:get("auto_blocking_delay_t")
-		mod.block_delay_unit = unit
 	end
 end)
 mod:hook(PlayerCharacterStateFalling, "update", function (func, self, unit, input, dt, context, t)
@@ -1154,76 +1002,262 @@ OutlineSettings.colors.ally.outline_multiplier = mod:get("ally")
 OutlineSettings.colors.knocked_down.outline_multiplier = mod:get("knocked_down")
 OutlineSettings.colors.interactable.outline_multiplier = mod:get("interactable")
 OutlineSettings.colors.player_attention.outline_multiplier = mod:get("player_attention")
+--[[
+mod:hook_origin(OutlineSystem, "on_add_extension", function (self, world, unit, extension_name)
+	local extension = {}
 
--- End Conditions & Restart Level
-GameModeSettings.adventure.lose_condition_time_dead = mod:get("lose_condition_time_dead") -- all player dead timer
-GameModeSettings.adventure.lose_condition_time = mod:get("lose_condition_time") -- 
-mod:hook_origin(GameModeAdventure, "evaluate_end_conditions", function (self, round_started, dt, t)
-	if self.lost_condition_timer and mod.do_insta_fail then -- insta fail
-		mod.do_insta_fail = nil
-		self.lost_condition_timer = t - 1
-	end
-	
-	if script_data.disable_gamemode_end then
-		return false
-	end
+	if extension_name == "PlayerOutlineExtension" then
+		extension.outline_color = OutlineSettings.colors.ally
+		extension.method = "never"
+		extension.flag = "outline_unit"
+		extension.apply_method = "unit_and_childs"
+	elseif extension_name == "PlayerHuskOutlineExtension" then
+		extension.outline_color = OutlineSettings.colors.ally
+		extension.distance = OutlineSettings.ranges.player_husk
+		extension.method = "outside_distance_or_not_visible"
+		extension.last_set_method = extension.method
+		extension.flag = "outline_unit"
+		extension.apply_method = "unit_and_childs"
 
-	local spawn_manager = Managers.state.spawn
-	local humans_dead = spawn_manager:all_humans_dead()
-	local players_disabled = spawn_manager:all_players_disabled()
-	local lost = not self._lose_condition_disabled and (humans_dead or players_disabled or self._level_failed or self:_is_time_up())
-
-	if self.about_to_lose then
-		if lost then
-			if self.lost_condition_timer < t then
-
-				if mod.do_restart then -- restart
-					mod.do_restart = nil
-					return true, "reload"
-				else
-					return true, "lost"
-				end
+		extension.set_method_player_setting = function (method)
+			if extension.override_method then
+				extension.last_set_method = method
 			else
-				return false
+				extension.method = method
+				extension.last_set_method = method
 			end
-		else
-			self.about_to_lose = nil
-			self.lost_condition_timer = nil
 		end
+
+		extension.update_override_method_player_setting = function ()
+			local override_method = nil
+			local player_outlines = Application.user_setting("player_outlines")
+
+			if player_outlines == "off" then
+				override_method = "never"
+			elseif player_outlines == "always_on" then
+				override_method = "always"
+			end
+
+			extension.override_method = override_method
+
+			if override_method == nil then
+				extension.method = extension.last_set_method
+			else
+				extension.method = override_method
+			end
+		end
+
+		extension.update_override_method_player_setting()
+	elseif extension_name == "PickupOutlineExtension" then
+		extension.outline_color = OutlineSettings.colors.interactable
+		extension.distance = OutlineSettings.ranges.pickup
+		extension.method = "within_distance_and_not_in_dark"
+		extension.pinged_method = "not_in_dark"
+		extension.flag = "outline_unit_z"
+		extension.apply_method = "unit"
+
+		extension.update_override_outline_color = function ()
+			local current_color = extension.outline_color
+			local new_colour = OutlineSettings.colors.interactable
+
+			if current_color ~= new_colour then
+				current_color = new_colour
+			end	
+			extension.reapply = true
+		end
+
+		extension.update_override_outline_color()
+	elseif extension_name == "AIOutlineExtension" then
+		extension.outline_color = OutlineSettings.colors.interactable
+		extension.distance = OutlineSettings.ranges.player_husk
+		extension.method = "never"
+		extension.pinged_method = "not_in_dark"
+		extension.flag = "outline_unit"
+		extension.apply_method = "unit"
+
+		extension.update_override_outline_color = function ()
+			local current_color = extension.outline_color
+			local new_colour = OutlineSettings.colors.interactable
+
+			if current_color ~= new_colour then
+				current_color = new_colour
+			end	
+			extension.reapply = true
+		end
+
+		extension.update_override_outline_color()
+	elseif extension_name == "DoorOutlineExtension" then
+		extension.outline_color = OutlineSettings.colors.interactable
+		extension.distance = OutlineSettings.ranges.doors
+		extension.method = "within_distance_and_not_in_dark"
+		extension.pinged_method = "not_in_dark"
+		extension.flag = "outline_unit_z"
+		extension.apply_method = "unit"
+
+		extension.update_override_outline_color = function ()
+			local current_color = extension.outline_color
+			local new_colour = OutlineSettings.colors.interactable
+
+			if current_color ~= new_colour then
+				current_color = new_colour
+			end	
+			extension.reapply = true
+		end
+
+		extension.update_override_outline_color()
+	elseif extension_name == "ObjectiveOutlineExtension" then
+		extension.outline_color = OutlineSettings.colors.interactable
+		extension.distance = OutlineSettings.ranges.objective
+		extension.method = "always"
+		extension.pinged_method = "always"
+		extension.flag = "outline_unit"
+		extension.apply_method = "unit"
+
+		extension.update_override_outline_color = function ()
+			local current_color = extension.outline_color
+			local new_colour = OutlineSettings.colors.interactable
+
+			if current_color ~= new_colour then
+				current_color = new_colour
+			end	
+			extension.reapply = true
+		end
+
+		extension.update_override_outline_color()
+	elseif extension_name == "ElevatorOutlineExtension" then
+		extension.outline_color = OutlineSettings.colors.interactable
+		extension.distance = OutlineSettings.ranges.elevators
+		extension.method = "within_distance"
+		extension.pinged_method = "not_in_dark"
+		extension.flag = "outline_unit_z"
+		extension.apply_method = "unit"
+
+		extension.update_override_outline_color = function ()
+			local current_color = extension.outline_color
+			local new_colour = OutlineSettings.colors.interactable
+
+			if current_color ~= new_colour then
+				current_color = new_colour
+			end	
+			extension.reapply = true
+		end
+
+		extension.update_override_outline_color()
+	elseif extension_name == "ConditionalInteractOutlineExtension" then
+		extension.outline_color = OutlineSettings.colors.interactable
+		extension.distance = OutlineSettings.ranges.doors
+		extension.method = "conditional_within_distance"
+		extension.flag = "outline_unit_z"
+		extension.apply_method = "unit"
+
+		extension.update_override_outline_color = function ()
+			local current_color = extension.outline_color
+			local new_colour = OutlineSettings.colors.interactable
+
+			if current_color ~= new_colour then
+				current_color = new_colour
+			end	
+			extension.reapply = true
+		end
+
+		extension.update_override_outline_color()
+	elseif extension_name == "ConditionalPickupOutlineExtension" then
+		extension.outline_color = OutlineSettings.colors.interactable
+		extension.distance = OutlineSettings.ranges.pickup
+		extension.method = "conditional_within_distance"
+		extension.flag = "outline_unit_z"
+		extension.apply_method = "unit"
+
+		extension.update_override_outline_color = function ()
+			local current_color = extension.outline_color
+			local new_colour = OutlineSettings.colors.interactable
+
+			if current_color ~= new_colour then
+				current_color = new_colour
+			end	
+			extension.reapply = true
+		end
+
+		extension.update_override_outline_color()
+	elseif extension_name == "EnemyOutlineExtension" then
+		extension.outline_color = OutlineSettings.colors.knocked_down
+		extension.method = "never"
+		extension.pinged_method = "not_in_dark"
+		extension.flag = "outline_unit"
+		extension.apply_method = "unit_and_childs"
+
+		extension.update_override_outline_color = function ()
+			local current_color = extension.outline_color
+			local new_colour = OutlineSettings.colors.knocked_down
+
+			if current_color ~= new_colour then
+				current_color = new_colour
+			end	
+			extension.reapply = true
+		end
+
+		extension.update_override_outline_color()
 	end
 
-	if lost then
-		self.about_to_lose = true
-
-		if humans_dead then
-			self.lost_condition_timer = t + GameModeSettings.adventure.lose_condition_time_dead
-		else
-			self.lost_condition_timer = t + GameModeSettings.adventure.lose_condition_time
-		end
-	elseif self._level_completed and not self.level_complete_timer then
-		self.level_complete_timer = t + 0.4
-
-		return false
-	elseif self._level_completed and self.level_complete_timer <= t then
-		self.level_complete_timer = nil
-		return true, "won"
-	else
-		return false
+	extension.set_outline_color = function (color)
+		extension.outline_color = OutlineSettings.colors[color]
+		extension.new_color = true
 	end
+
+	extension.reapply_outline = function ()
+		extension.reapply = true
+	end
+
+	extension.set_method = function (method)
+		extension.method = method
+	end
+
+	extension.set_pinged = function (pinged)
+		if pinged then
+			if not extension.pinged then
+				extension.previous_flag = extension.flag
+			end
+
+			local c = extension.outline_color.channel
+			local channel = Color(c[1], c[2], c[3], c[4])
+
+			self:outline_unit(unit, extension.previous_flag, channel, false, extension.apply_method, false)
+
+			extension.flag = "outline_unit"
+			local c = OutlineSettings.colors.player_attention.channel
+			local channel = Color(c[1], c[2], c[3], c[4])
+
+			self:outline_unit(unit, extension.flag, channel, true, extension.apply_method, false)
+
+			extension.outlined = true
+		else
+			local c = OutlineSettings.colors.player_attention.channel
+			local channel = Color(c[1], c[2], c[3], c[4])
+
+			self:outline_unit(unit, extension.flag, channel, false, extension.apply_method, false)
+
+			if extension.previous_flag then
+				extension.flag = extension.previous_flag
+			else
+				error("ChestInfo mod caused outline crash, try updating the mod.")
+			end
+
+			extension.reapply = true
+		end
+
+		extension.pinged = pinged
+	end
+
+	extension.outlined = false
+	extension.new_color = false
+
+	ScriptUnit.set_extension(unit, "outline_system", extension, {})
+
+	self.unit_extension_data[unit] = extension
+	self.units[#self.units + 1] = unit
+
+	return extension
 end)
-mod.restart_level = function()
-	mod:pcall(function()
-		if Managers.state.game_mode:level_key() == "inn_level" then
-			mod:echo("Can't restart in the inn.")
-			return
-		end
-
-		mod.do_insta_fail = true
-		mod.do_restart = true
-		Managers.state.game_mode:fail_level()
-	end)
-end
-mod:command("restart", mod:localize("restart_level_command_description"), function() mod.restart_level() end)
 
 -- Hide Player Level
 --[[mod:hook(UnitFrameUI, "draw", function (func, self, dt)
@@ -1240,7 +1274,7 @@ mod:command("restart", mod:localize("restart_level_command_description"), functi
 	end
 
 	func(self, dt)
-end)]]
+end)--]]
 
 -- No mission objective
 mod:hook(MissionObjectiveUI, "draw", function(func, self, dt)
@@ -1272,10 +1306,6 @@ end)
 --- Hide or make less obtrusive the floating mission marker.
 --- Used for "Set Free" on respawned player.
 mod:hook(TutorialUI, "update_mission_tooltip", function(func, self, ...)
-	if mod:get("no_tutorial_ui") then
-		return
-	end
-
 	func(self, ...)
 
 	if mod:get("unobtrusive_mission_tooltip") then
@@ -1292,17 +1322,6 @@ mod:hook(TutorialUI, "update_mission_tooltip", function(func, self, ...)
 			end
 		end)
 	end
-end)
-mod:hook(TutorialUI, "update", function(func, self, ...)
-	if mod:get("no_tutorial_ui") then
-		mod:pcall(function()
-			self.active_tooltip_widget = nil
-			for _, obj_tooltip in ipairs( self.objective_tooltip_widget_holders ) do
-				obj_tooltip.updated = false
-			end
-		end)
-	end
-	return func(self, ...)
 end)
 
 -- Lohner Speaking
@@ -1346,13 +1365,19 @@ end)
 
 -- Enable Client Map Interaction
 mod:hook_safe(IngameUI, "init", function (self, ingame_ui_context)
-	if self.is_in_inn and mod:get("client_start_game") then -- not self.is_server and
-		self.views.map_view:set_map_interaction_state(true)
+	if self.is_in_inn then
+		self.views.map_view:set_map_interaction_state(mod:get("client_start_game"))
+	end
+end)
+
+mod:hook_safe(IngameUI, "update", function (self, dt, t, disable_ingame_ui, end_of_level_ui)
+	if self.is_in_inn then
+		self.views.map_view:set_map_interaction_state(mod:get("client_start_game"))
 	end
 end)
 
 mod:network_register("client_find_game_request", function(sender, level_key, difficulty, private_game, random_level, game_mode, area, t, level_filter, user_name)
-	if self.is_server then
+	if Managers.player.is_server then
 		Managers.matchmaking:find_game(level_key, difficulty, private_game, random_level, game_mode, area, t, level_filter)
 		mod:chat_broadcast("Game Requested By: " .. user_name)
 	end
@@ -1362,7 +1387,7 @@ mod.game_request_amount = 0
 mod:hook(MatchmakingManager, "find_game", function (func, self, level_key, difficulty, private_game, random_level, game_mode, area, t, level_filter)
 	if not self.is_server then
 		local server_id = Managers.state.network._game_session_host
-		if server_id and mod.game_request_delay == nil then
+		if server_id  then --and mod.game_request_delay == nil
 			local user_name = Steam.user_name()
 			mod:network_send("client_find_game_request", server_id, level_key, difficulty, private_game, random_level, game_mode, area, t, level_filter, user_name)
 	 		mod.game_request_amount = mod.game_request_amount + 1
@@ -1371,9 +1396,64 @@ mod:hook(MatchmakingManager, "find_game", function (func, self, level_key, diffi
 		else
 			mod:echo("Unable to make client game request.")
 		end
-		return
+	else
+		func(self, level_key, difficulty, private_game, random_level, game_mode, area, t, level_filter)
 	end
-	func(self, level_key, difficulty, private_game, random_level, game_mode, area, t, level_filter)
+end)
+
+mod:hook_safe(MapView, "on_play_pressed", function (self, t)
+	self:exit(true)
+end)
+
+
+mod.are_all_peers_ingame = false
+mod:network_register("are_all_peers_ingame_cb", function(sender, result)
+	mod.are_all_peers_ingame = result
+end)
+mod:network_register("are_all_peers_ingame", function(sender)
+	local result = Managers.state.spawn._network_server:are_all_peers_ingame()
+	mod:network_send("are_all_peers_ingame_cb", sender, result)
+end)
+mod:hook(MapView, "init", function(func, ...)
+	local server_id = Managers.state.network._game_session_host
+	mod:network_send("are_all_peers_ingame", server_id)
+	func(...)
+end)
+
+local start_game_disable_tooltips = {
+	players_joining = "map_confirm_button_disabled_tooltip_players_joining",
+	wrong_level = "map_confirm_button_disabled_tooltip_level",
+	difficulty = "map_confirm_button_disabled_tooltip"
+}
+mod:hook(MapView, "_update_play_button_description", function (func, self)
+	if not self.is_server then
+		local players_joined = mod.are_all_peers_ingame
+		if not players_joined then
+			local server_id = Managers.state.network._game_session_host
+			mod:network_send("are_all_peers_ingame", server_id)
+		end
+		local is_difficulty_unlocked = self.difficulty_unlocked
+		local is_level_selected = self.selected_level_index ~= nil
+		local is_playable_level = self.playable_level
+		local tooltip_text = nil
+
+		if not players_joined then
+			tooltip_text = start_game_disable_tooltips.players_joining
+		elseif not is_playable_level or not is_level_selected then
+			tooltip_text = start_game_disable_tooltips.wrong_level
+		elseif not is_difficulty_unlocked then
+			tooltip_text = start_game_disable_tooltips.difficulty
+		end
+
+		local can_play = players_joined and is_playable_level and is_difficulty_unlocked and is_level_selected
+		self.confirm_button_widget.content.button_hotspot.disabled = not can_play
+
+		if tooltip_text then
+			self.confirm_button_disabled_tooltip_widget.content.tooltip_text = tooltip_text
+		end
+	else
+		func(self)
+	end
 end)
 
 -- Hit Markers

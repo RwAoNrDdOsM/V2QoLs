@@ -1,7 +1,7 @@
 local mod = get_mod("V2QoLs")
 
 return {
-	name = "V2QoLs",
+	name = "VT2QoLs",
 	description = mod:localize("mod_description"),
 	is_togglable = true,
 	custom_gui_textures = {
@@ -21,14 +21,6 @@ return {
 	options = {
 		widgets = {
 			{
-				setting_id = "restart_level_hotkey",
-				type = "keybind",
-		  		keybind_trigger = "pressed",
-		  		keybind_type = "function_call",
-		  		function_name = "restart_level",
-		  		default_value = {},
-			},
-			{
 				setting_id    = "client_start_game",
 				type          = "checkbox",
 				default_value = true,
@@ -37,24 +29,6 @@ return {
 				setting_id    = "auto_blocking",
 				type          = "checkbox",
 				default_value = true,
-				sub_widgets = {
-					{
-						setting_id    = "auto_blocking_delay",
-						type          = "checkbox",
-						default_value = false,
-						sub_widgets = {
-							{
-								setting_id    = "auto_blocking_delay_t",
-								type          = "numeric",
-								range = {0.1, 3},
-								unit_text = "seconds",
-								decimals_number = 1,   
-								default_value = 0.5,
-							}
-						}
-					},
-					
-				},
 			},
 			{
 				setting_id    = "outlines",
@@ -116,18 +90,13 @@ return {
 				setting_id    = "tooltip_mission",
 				type          = "group",
 				sub_widgets = {
-					{
+					--[[{
 						setting_id    = "no_mission_objective",
 						type          = "checkbox",
 						default_value = false,
-					},
+					},--]]
 					{
 						setting_id    = "unobtrusive_mission_tooltip",
-						type          = "checkbox",
-						default_value = false,
-					},
-					{
-						setting_id    = "no_tutorial_ui",
 						type          = "checkbox",
 						default_value = false,
 					},
@@ -139,35 +108,14 @@ return {
 				},
 			},
 			{
-				setting_id    = "lose_conditions",
-				type          = "group",
-				sub_widgets = {
-					{
-						setting_id    = "lose_condition_time",
-						type          = "numeric",
-						range = {1, 20},
-						unit_text = "seconds",
-						default_value = 4,
-					},
-					{
-						setting_id    = "lose_condition_time_dead",
-						type          = "numeric",
-						range = {1, 20},
-						unit_text = "seconds",
-						default_value = 4,
-					},
-				},
+				setting_id    = "overcharge_bar",
+				type          = "checkbox",
+				default_value = false,
 			},
 			{
-				setting_id    = "overcharge_bar",
-				type          = "dropdown",
-				default_value = "both",
-				options = {	
-					{text = "disabled",   value = false, show_widgets = {}},
-					{text = "overcharge_bar_high",   value = "high", show_widgets = {}},			
-					{text = "overcharge_bar_med",   value = "med", show_widgets = {}},
-					{text = "overcharge_bar_both", value = "both", show_widgets = {}},
-				},
+				setting_id    = "pickups",
+				type          = "checkbox",
+				default_value = false,
 			},
 			--[[{
 				setting_id    = "hide_level",

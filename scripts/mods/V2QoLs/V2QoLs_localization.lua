@@ -1,6 +1,6 @@
 return {
 	mod_description = {
-		en = "V2QoLs description",
+		en = "A mod that brings Quality of Life elements from Vermintide 2, it be mods or the game, into Vermintide 1.",
 	},
 
 	-- Commands
@@ -14,12 +14,6 @@ return {
 	},
 	seconds = {
 		en = " seconds"
-	},
-	restart_level_hotkey = {
-		en = "Restart Level Hotkey"
-	},
-	restart_level_hotkey_description = {
-		en = "Restart the level hotkey."
 	},
 
 	client_start_game = {
@@ -36,18 +30,6 @@ return {
 	},
 	auto_blocking_description = {
 		en = "Enables Automatic Blocking when you revive a player, pull up a player or release a player from a hook."
-	},
-	auto_blocking_delay = {
-		en = "Automatic Blocking Delay"
-	},
-	auto_blocking_delay_description = {
-		en = "Keeps you blocking for the delayed amount of time, and unblocks you once the delay is over if you are still blocking."
-	},
-	auto_blocking_delay_t = {
-		en = "Automatic Blocking Delay Time"
-	},
-	auto_blocking_delay_t_description = {
-		en = "Default Value: 0.5"
 	},
 
 	outlines = {
@@ -115,9 +97,6 @@ return {
 	},
 
 	tooltip_mission = {
-		"Markers"
-	},
-	tooltip_mission = {
 		en = "Mission and Objective Markers"
 	},
 	no_mission_objective = {
@@ -146,46 +125,19 @@ return {
 		en = "Disable objective markers like \"Set Free\" for dead players."
 	},
 
-	lose_conditions = {
-		en = "Lose Conditions"
-	},
-	lose_conditions_description = {
-		en = "Modify Lose Conditions. Host only."
-	},
-	lose_condition_time = {
-		en = "Lost Condition Time"
-	},
-	lose_condition_time_description = {
-		en = "Time before level is failed."
-		.."\nVT1 Default Value: 4"
-		.."\nVT2 Default Value: 10"
-	},
-	lose_condition_time_dead = {
-		en = "Lost Condition Time when Players Dead"
-	},
-	lose_condition_time_dead_description = {
-		en = "Time before level is failed when all players are dead."
-		.."\nVT1 Default Value: 4"
-		.."\nVT2 Default Value: 4"
-	},
 
 	overcharge_bar = {
 		en = "Overcharge Bar",
 	},
 	overcharge_bar_description = {
-		en = "Adds more lines to the Overcharge Bar to signify Medium and High Overcharge."
-		.."\n Must reload level to take effect."
+		en = "Adds a line to the Overcharge Bar to signify High Overcharge."
 	},
-	disabled = {
-		en = "Disabled"
+
+	pickups = {
+		en = "Pickups"
 	},
-	overcharge_bar_high = {
-		en = "High Line Only"
-	},
-	overcharge_bar_med = {
-		en = "Medium Line Only"
-	},
-	overcharge_bar_both = {
-		en = "Both High & Medium Lines"
+	pickups_description = {
+		en = "Creates a glow around potions, red for strength and blue for speed, so they are more distinguishable from a distance."
+		.."\nOnly works when you host and on map reset."
 	},
 }
