@@ -997,6 +997,258 @@ mod:hook(PlayerCharacterStateWalking, "update", function (func, self, unit, inpu
     return func(self, unit, input, dt, context, t)
 end)
 
+-- Auto block when in menu or out of focus
+
+CutsceneSystem.is_active = function (self)
+	return self.active_camera ~= nil
+end
+
+local is_windows_platform = PLATFORM == "win32"
+
+PlayerInputExtension.is_input_blocked = function (self)
+	return (self.input_service:is_blocked() or (is_windows_platform and not Window.has_focus())) and not DamageUtils.is_in_inn and not Managers.state.entity:system("cutscene_system"):is_active()
+	-- or (HAS_STEAM and Managers.steam:is_overlay_active())
+end
+
+PlayerBotInput.is_input_blocked = function (self)
+	return false
+end
+
+mod:hook(PlayerInputExtension,"get", function (func, self, input_key, consume)
+	if mod:get("auto_blocking") then
+		local value = self.input_service:get(input_key, consume)
+
+		if not self.enabled or self:is_input_blocked() then
+			local value_type = type(value)
+
+			if value_type == "userdata" then
+				return Vector3.zero()
+			end
+
+			return nil
+		end
+
+		return value
+	else
+		return func(self, input_key, consume)
+	end
+end)
+
+local function validate_action(unit, action_name, sub_action_name, action_settings, input_extension, inventory_extension, only_check_condition, ammo_extension)
+	local skip_hold = action_settings.do_not_validate_with_hold
+	local hold_input = not skip_hold and action_settings.hold_input
+	local wield_input = CharacterStateHelper.wield_input(input_extension, inventory_extension, action_name)
+	local buffered_input = input_extension:get_buffer(action_name)
+	local action_input = input_extension:get(action_name)
+	local action_hold_input = hold_input and input_extension:get(hold_input)
+	local allow_toggle = action_settings.allow_hold_toggle and input_extension.toggle_alternate_attack
+	local hold_or_toggle_input = (allow_toggle and action_input) or (not allow_toggle and (action_input or action_hold_input))
+	local is_auto_blocking = action_settings.kind == "block" and input_extension:is_input_blocked()
+
+	if only_check_condition or wield_input or buffered_input or hold_or_toggle_input or is_auto_blocking then
+		local condition_func = action_settings.condition_func
+		local condition_passed = nil
+
+		if condition_func then
+			condition_passed = condition_func(unit, input_extension, ammo_extension)
+		else
+			condition_passed = true
+		end
+
+		if condition_passed then
+			if not wield_input and not action_settings.keep_buffer then
+				input_extension:reset_input_buffer()
+			end
+
+			return action_name, sub_action_name
+		end
+	end
+end
+
+local weapon_action_interrupt_damage_types = {
+	cutting = true
+}
+local interupting_action_data = {}
+
+mod:hook(CharacterStateHelper, "update_weapon_actions", function (func, t, unit, input_extension, inventory_extension, damage_extension)
+	if mod:get("auto_blocking") then
+		Profiler.start("weapon_action")
+
+		local item_data, right_hand_weapon_extension, left_hand_weapon_extension = CharacterStateHelper._get_item_data_and_weapon_extensions(inventory_extension)
+
+		table.clear(interupting_action_data)
+
+		if not item_data then
+			Profiler.stop("weapon_action")
+
+			return
+		end
+
+		local new_action, new_sub_action, current_action_settings, current_action_extension, current_action_hand = nil
+		local buff_extension = ScriptUnit.extension(unit, "buff_system")
+		current_action_settings, current_action_extension, current_action_hand = CharacterStateHelper._get_current_action_data(left_hand_weapon_extension, right_hand_weapon_extension)
+		local item_template = BackendUtils.get_item_template(item_data)
+		local recent_damage_type = damage_extension:recently_damaged()
+		local status_extension = ScriptUnit.extension(unit, "status_system")
+		local can_interrupt, reloading = nil
+		local player = Managers.player:owner(unit)
+		local is_bot_player = player and player.bot_player
+
+		if recent_damage_type and weapon_action_interrupt_damage_types[recent_damage_type] then
+			local ammo_extension = (left_hand_weapon_extension and left_hand_weapon_extension.ammo_extension) or (right_hand_weapon_extension and right_hand_weapon_extension.ammo_extension)
+
+			if ammo_extension then
+				if left_hand_weapon_extension and left_hand_weapon_extension.ammo_extension then
+					reloading = left_hand_weapon_extension.ammo_extension:is_reloading()
+				end
+
+				if right_hand_weapon_extension and right_hand_weapon_extension.ammo_extension then
+					reloading = right_hand_weapon_extension.ammo_extension:is_reloading()
+				end
+			end
+
+			if (buff_extension and buff_extension:has_buff_type("damage_reduction_from_proc")) or (current_action_settings and current_action_settings.uninterruptible) or script_data.uninterruptible or reloading or is_bot_player then
+				can_interrupt = false
+			else
+				can_interrupt = status_extension:hitreact_interrupt()
+			end
+
+			if can_interrupt and not status_extension:is_disabled() then
+				if current_action_settings then
+					current_action_extension:stop_action("interrupted")
+				end
+
+				local first_person_extension = ScriptUnit.extension(unit, "first_person_system")
+
+				CharacterStateHelper.play_animation_event(unit, "hit_reaction")
+				status_extension:set_pushed(true)
+				Profiler.stop("weapon_action")
+
+				return
+			end
+		end
+
+		if current_action_settings then
+			new_action, new_sub_action = CharacterStateHelper._get_streak_action_data(item_template, current_action_extension, current_action_settings, input_extension, inventory_extension, unit, t)
+
+			if not new_action then
+				new_action, new_sub_action = CharacterStateHelper._get_chain_action_data(item_template, current_action_extension, current_action_settings, input_extension, inventory_extension, unit, t, is_bot_player)
+			end
+
+			if not new_action then
+				if current_action_settings.allow_hold_toggle and input_extension.toggle_alternate_attack then
+					local input_id = current_action_settings.lookup_data.action_name
+
+					if input_id and input_extension:get(input_id, true) and current_action_extension:can_stop_hold_action(t) then
+						current_action_extension:stop_action("hold_input_released")
+					end
+				elseif current_action_settings.kind ~= "block" or not input_extension:is_input_blocked() then
+					local input_id = current_action_settings.hold_input
+
+					if input_id and not input_extension:get(input_id) and current_action_extension:can_stop_hold_action(t) then
+						current_action_extension:stop_action("hold_input_released")
+					end
+				end
+			end
+		elseif item_template.next_action then
+			local action_data = item_template.next_action
+			local action_name = action_data.action
+			local only_check_condition = true
+			local sub_actions = item_template.actions[action_name]
+
+			for sub_action_name, action_settings in pairs(sub_actions) do
+				if sub_action_name ~= "default" and action_settings.condition_func then
+					new_action, new_sub_action = validate_action(unit, action_name, sub_action_name, action_settings, input_extension, inventory_extension, only_check_condition)
+
+					if new_action and new_sub_action then
+						break
+					end
+				end
+			end
+
+			if not new_action then
+				local action_settings = item_template.actions[action_name].default
+				new_action, new_sub_action = validate_action(unit, action_name, "default", action_settings, input_extension, inventory_extension, only_check_condition)
+			end
+
+			item_template.next_action = nil
+		else
+			local ammo_extension = (left_hand_weapon_extension and left_hand_weapon_extension.ammo_extension) or (right_hand_weapon_extension and right_hand_weapon_extension.ammo_extension)
+
+			for action_name, sub_actions in pairs(item_template.actions) do
+				for sub_action_name, action_settings in pairs(sub_actions) do
+					if sub_action_name ~= "default" and action_settings.condition_func then
+						new_action, new_sub_action = validate_action(unit, action_name, sub_action_name, action_settings, input_extension, inventory_extension, false, ammo_extension)
+
+						if new_action and new_sub_action then
+							break
+						end
+					end
+				end
+
+				if not new_action then
+					local action_settings = item_template.actions[action_name].default
+					new_action, new_sub_action = validate_action(unit, action_name, "default", action_settings, input_extension, inventory_extension, false, ammo_extension)
+				end
+
+				if new_action then
+					break
+				end
+			end
+		end
+
+		if new_action and new_sub_action then
+			local actions = item_template.actions
+			local new_action_settings = actions[new_action][new_sub_action]
+			local weapon_action_hand = new_action_settings.weapon_action_hand or "right"
+
+			if weapon_action_hand == "both" then
+				Profiler.stop("weapon_action")
+
+				return
+			end
+
+			if weapon_action_hand == "either" then
+				if right_hand_weapon_extension then
+					weapon_action_hand = "right"
+				else
+					weapon_action_hand = "left"
+				end
+			end
+
+			interupting_action_data.new_action = new_action
+			interupting_action_data.new_sub_action = new_sub_action
+
+			if weapon_action_hand == "left" then
+				assert(left_hand_weapon_extension, "tried to start a left hand weapon action without a left hand wielded unit")
+
+				if current_action_hand == "right" then
+					right_hand_weapon_extension:stop_action("new_interupting_action", interupting_action_data)
+				end
+
+				left_hand_weapon_extension:start_action(new_action, new_sub_action, item_template.actions, t)
+				Profiler.stop("weapon_action")
+
+				return
+			end
+
+			assert(right_hand_weapon_extension, "tried to start a right hand weapon action without a right hand wielded unit")
+
+			if current_action_hand == "left" then
+				left_hand_weapon_extension:stop_action("new_interupting_action", interupting_action_data)
+			end
+
+			right_hand_weapon_extension:start_action(new_action, new_sub_action, item_template.actions, t)
+		end
+
+		Profiler.stop("weapon_action")
+	else
+		return func(t, unit, input_extension, inventory_extension, damage_extension)
+	end
+end)
+
+
+
 -- Pinging
 OutlineSettings.colors.ally.outline_multiplier = mod:get("ally")
 OutlineSettings.colors.knocked_down.outline_multiplier = mod:get("knocked_down")
